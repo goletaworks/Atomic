@@ -111,7 +111,7 @@ var Atomic = {
 
 		// add the convenience methods
 		if(type != Atomic.types.CONNECTOR){
-			newObject.connectTo = function(targetObject, connectorType) { Atomic.connect(newObject, targetObject, connectorType); };
+			newObject.connectTo = function(targetObject, connectorType) { return Atomic.connect(newObject, targetObject, connectorType); };
 
 			// the beforeConnect and onConnect events, called before and after a connector is connected to objects
 			if(!newObject.beforeConnect){
