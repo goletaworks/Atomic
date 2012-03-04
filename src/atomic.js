@@ -58,8 +58,6 @@ var Atomic = {
 	// --------------------------------------------------------
 	// define the arrowheads
 	defineMarkers : function(){
-		var svgDefs = jQuery('svg defs');
-
 		// Unfortunately, can't use jQuery to add markers because it converts attributes to lower case
 		// (for XHTML compatibility) which breaks SVG and Raphael doesn't natively support markers, so
 		// creating my own, I guess
@@ -182,8 +180,7 @@ var Atomic = {
 
 	// --------------------------------------------------------------
 	setObjectDragDropHandlers : function(object){
-		var start = function (x, y, ev) {
-			//ev.preventDefault();
+		var start = function (x, y) {
 			this.ox = this.getX();
 			this.oy = this.getY();
 			if(this.parent){
@@ -198,8 +195,7 @@ var Atomic = {
 				this.toFront();
 			}
 		};
-		var move = function(dx, dy, x, y, ev) {
-			//ev.preventDefault();
+		var move = function(dx, dy, x, y) {
 			this.setX(this.ox + dx);
 			this.setY(this.oy + dy);
 			Atomic.updateConnectors(this);
@@ -216,7 +212,8 @@ var Atomic = {
 		var up = function () {
 			// nop
 		};
-		object.drag(move, start, up);
+		
+		object.drag(move, start, up);		
 	},
 
 	// --------------------------------------------------------------
@@ -265,8 +262,7 @@ var Atomic = {
 		if(object2.text) object2.text.toFront();
 		object1.onConnect(connector);
 		object2.onConnect(connector);
-
-		jQuery('#' + pathId).attr('marker-end', 'url(#Arrow)');
+		document.getElementById(pathId).setAttribute('marker-end', 'url(#Arrow)');
 		return connector;
 	},
 
