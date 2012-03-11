@@ -1,4 +1,5 @@
 var Atomic = {
+	CONNECTOR_NODE_SEPARATOR : '-',	
 	FONT_SIZE : 12,
 	width : 0,
 	height : 0,
@@ -150,7 +151,7 @@ var Atomic = {
 
 			var t = Atomic.draw({
 				type : 'text',
-				id : info.id + '-text',
+				id : info.id + '_text',
 				x : x,
 				y : y,
 				text : info.text
@@ -159,7 +160,7 @@ var Atomic = {
 			newObject.text = t;
 			Atomic.setObjectDragDropHandlers(t);
 		}
-
+		
 		// return the new object
 		return newObject;
 	},
@@ -180,40 +181,14 @@ var Atomic = {
 
 	// --------------------------------------------------------------
 	setObjectDragDropHandlers : function(object){
-		var start = function (x, y) {
-			this.ox = this.getX();
-			this.oy = this.getY();
-			if(this.parent){
-				this.parent.toFront();
-				this.toFront();
-			}
-			else if(this.text) {
-				this.toFront();
-				this.text.toFront();
-			}
-			else {
-				this.toFront();
-			}
-		};
-		var move = function(dx, dy, x, y) {
-			this.setX(this.ox + dx);
-			this.setY(this.oy + dy);
-			Atomic.updateConnectors(this);
-			if(this.text){
-				this.text.setX(this.getX());
-				this.text.setY(this.getY());
-			}
-			if(this.parent){
-				this.parent.setX(this.getX());
-				this.parent.setY(this.getY());
-				Atomic.updateConnectors(this.parent);
-			}
-		};
-		var up = function () {
-			// nop
-		};
 		
-		object.drag(move, start, up);		
+		try {
+			object.undrag();
+			object.drag(Atomic.events.move, Atomic.events.start, Atomic.events.up);
+		}
+		catch(e){
+			alert('Failed to add drag-drop handlers.');
+		}
 	},
 
 	// --------------------------------------------------------------
@@ -247,7 +222,7 @@ var Atomic = {
 
 		object1.beforeConnect(object2, pathPoints);
 		object2.beforeConnect(object1, pathPoints);
-		var pathId = object1.id + '-' + object2.id;
+		var pathId = object1.id + Atomic.CONNECTOR_NODE_SEPARATOR + object2.id;
 		var connector = Atomic.draw({
 			type : Atomic.types.CONNECTOR,
 			id : pathId,
@@ -256,10 +231,9 @@ var Atomic = {
 			object2 : object2,
 			connectorType : connectorType
 		});
-		object1.toFront();
-		if(object1.text) object1.text.toFront();
-		object2.toFront();
-		if(object2.text) object2.text.toFront();
+
+		connector.toBack();
+		
 		object1.onConnect(connector);
 		object2.onConnect(connector);
 		document.getElementById(pathId).setAttribute('marker-end', 'url(#Arrow)');
@@ -267,13 +241,13 @@ var Atomic = {
 	},
 
 	// --------------------------------------------------------------
-	updateConnectors : function(object) {
+	updateConnectors : function(object) {	
 		var connectors = Atomic.objects[Atomic.types.CONNECTOR];
 		for(id in connectors){
 			var origConnector = connectors[id];
 			var cType = origConnector.connectorType;
 			if(id.indexOf(object.id) > -1) {
-				var objectIds = id.split('-');
+				var objectIds = id.split(Atomic.CONNECTOR_NODE_SEPARATOR);
 				origConnector.remove();
 				var obj1 = Atomic.get(objectIds[0]);
 				var obj2 = Atomic.get(objectIds[1]);
@@ -288,6 +262,58 @@ var Atomic = {
 				}
 			}
 		}
+	}
+};
+
+
+/**
+ * Events that can be attached to draggable object.
+ */
+Atomic.events = {
+	start : function(ev) {
+		this.ox = this.getX();
+		this.oy = this.getY();
+
+
+		if(this.parent && this.parent.toFront){
+			this.parent.toFront();
+		}
+		this.toFront();
+		if(this.text && this.text.toFront) {					
+			this.text.toFront();
+		}
+	},
+	
+	move : function(dx, dy, x, y, ev) {
+		// if it's a text item, fire on the "parent" instead
+		var idParts = this.id.split('_');
+		if(idParts.length==2 && idParts[1]=='text'){
+			console.log('**** REDIRECT TO ' + idParts[0]);
+			console.log(ev);
+			var par = Atomic.get(idParts[0]);			
+			par.move(dx, dy, x, y, ev);
+		}
+		
+		this.setX(this.ox + dx);
+		this.setY(this.oy + dy);
+		Atomic.updateConnectors(this);
+
+		console.log('after move: ' + this.id + ' ' + this.getX() + ',' + this.getY());		
+		if(this.text){
+			this.text.setX(this.getX());
+			this.text.setY(this.getY());
+		}		
+		
+		if(this.parent){			
+			this.parent.setX(this.getX());
+			this.parent.setY(this.getY());
+			Atomic.updateConnectors(this.parent);
+		}		
+	},
+	
+	up : function(ev) {
+		// on iPhone 3, handlers get removed during DOM removeChild/appendChild of _tofront, so reset them here
+		Atomic.setObjectDragDropHandlers(this);
 	}
 };
 
@@ -314,7 +340,21 @@ Atomic.factories = {
 		return c;
 	},
 
+	ellipse : function(info) {
+		var ell = Atomic.canvas.ellipse(info.x, info.y, info.width, info.height);
+		ell.attr(info);
+		ell.id = info.id;
+		Atomic.setObjectDragDropHandlers(ell);
+		return ell;
+	},
 
+	image : function(info) {
+		var img = Atomic.canvas.image(info.src, info.x, info.y, info.width, info.height);
+		img.attr(info);
+		img.id = info.id;
+		Atomic.setObjectDragDropHandlers(img);
+		return img;
+	},
 
 	/**
 	 * Draws a connector. (The same as a path except it's stored in the connectors
@@ -326,23 +366,7 @@ Atomic.factories = {
 		connector.object1 = info.object1;
 		connector.object2 = info.object2;
 		connector.connectorType = info.connectorType;
-
 		return connector;
-	},
-
-
-	ellipse : function(info) {
-		var ell = Atomic.canvas.ellipse(info.x, info.y, info.width, info.height);
-		ell.attr(info);
-		Atomic.setObjectDragDropHandlers(ell);
-		return ell;
-	},
-
-	image : function(info) {
-		var img = Atomic.canvas.image(info.src, info.x, info.y, info.width, info.height);
-		img.attr(info);
-		Atomic.setObjectDragDropHandlers(img);
-		return img;
 	},
 
 	/**
@@ -410,7 +434,7 @@ Atomic.factories = {
 		var t = Atomic.canvas.text(info.x, info.y, info.text);
 		t.attr({'font-size' : Atomic.FONT_SIZE});
 		t.attr(info);
-		var textId = info.text + '-' + info.x + '-' + info.y;
+		var textId = info.text + '_' + info.x + '_' + info.y;
 		t.id = textId;
 		return t;
 	}
