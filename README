@@ -1,4 +1,4 @@
-Atomic is a layer on top of Raphael (http://www.raphaeljs.com) that makes it easy to draw nodes and connectors in SVG.
+Atomic is a layer on top of Raphael (http://www.raphaeljs.com) that makes it easy to draw smart connectors between SVG elements.
 
 Demo: demo/index.html
 
