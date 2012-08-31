@@ -53,6 +53,7 @@ var Atomic = {
 		this.canvas.width = this.width;
 		this.canvas.height = this.height;
 		this.defineMarkers();
+		this.defineFilters();
 	},
 
 
@@ -74,6 +75,40 @@ var Atomic = {
 			polyline : {
 				points : '0,0 10,5 0,10 1,5',
 				fill : 'black'
+			}
+		});
+	},
+	
+	// --------------------------------------------------------------
+	defineFilters : function(){
+		/*
+		 * <filter id="f1" x="0" y="0" width="200%" height="200%">
+		      <feOffset result="offOut" in="SourceGraphic" dx="20" dy="20" />
+		      <feGaussianBlur result="blurOut" in="offOut" stdDeviation="10" />
+		      <feBlend in="SourceGraphic" in2="blurOut" mode="normal" />
+		    </filter>
+		 */
+		Atomic.canvas.addFilter({
+			id : 'DropShadow',
+			x : 0,
+			y : 0,
+			width : '200%',
+			height : '200%',
+			feOffset : {
+				result : 'offOut',
+				'in' : 'SourceGraphic',
+				dx : 20,
+				dy : 20,
+			},
+			feGaussianBlur : {
+				result : 'blurOut',
+				'in' : 'offOut',
+				stdDeviation : 10
+			},
+			feBlend : {
+				'in' : 'SourceGraphic',
+				in2 : 'blurOut',
+				mode : 'normal'
 			}
 		});
 	},
@@ -108,9 +143,9 @@ var Atomic = {
 		Atomic.objects[type][id] = newObject;
 		Atomic.idTypeMap[id] = type;
 
-		// add the convenience methods
 		if(type != Atomic.types.CONNECTOR){
-			newObject.connectTo = function(targetObject, connectorType) { return Atomic.connect(newObject, targetObject, connectorType); };
+			// add the convenience methods
+			newObject.connectTo = function(targetObject, info) { return Atomic.connect(newObject, targetObject, info); };
 
 			// the beforeConnect and onConnect events, called before and after a connector is connected to objects
 			if(!newObject.beforeConnect){
@@ -120,6 +155,7 @@ var Atomic = {
 				newObject.onConnect = function(connector) { /* default do nothing */ };
 			}
 		}
+		
 		if(type == Atomic.types.CIRCLE){
 			newObject.getX = function() { return this.attr('cx'); };
 			newObject.getY = function() { return this.attr('cy'); };
@@ -156,6 +192,7 @@ var Atomic = {
 				y : y,
 				text : info.text
 			});
+			
 			t.parent = newObject;
 			newObject.text = t;
 			Atomic.setObjectDragDropHandlers(t);
@@ -192,10 +229,11 @@ var Atomic = {
 	},
 
 	// --------------------------------------------------------------
-	connect : function(object1, object2, connectorType) {
+	connect : function(object1, object2, info) {
 
 		var pathPoints = [];
 		var objects = [object1, object2];
+		var connectorType = info.connectorType;
 
 		if(connectorType == null){
 			connectorType == Atomic.connectorTypes.LINE;
@@ -229,7 +267,8 @@ var Atomic = {
 			points : pathPoints,
 			object1 : object1,
 			object2 : object2,
-			connectorType : connectorType
+			connectorType : info.connectorType,
+			attributes : info.attributes
 		});
 
 		connector.toBack();
@@ -242,10 +281,11 @@ var Atomic = {
 
 	// --------------------------------------------------------------
 	updateConnectors : function(object) {	
-		var connectors = Atomic.objects[Atomic.types.CONNECTOR];
+		var connectors = Atomic.objects[Atomic.types.CONNECTOR];		
 		for(id in connectors){
 			var origConnector = connectors[id];
 			var cType = origConnector.connectorType;
+			var attrs = origConnector.attributes; 
 			if(id.indexOf(object.id) > -1) {
 				var objectIds = id.split(Atomic.CONNECTOR_NODE_SEPARATOR);
 				origConnector.remove();
@@ -258,7 +298,7 @@ var Atomic = {
 					console.error('Atomic.updateConnectors(): Could not find an object with ID ' + objectIds[1]);
 				}
 				else {
-					this.connect(obj1, obj2, cType);
+					this.connect(obj1, obj2, {connectorType : cType, attributes : attrs});
 				}
 			}
 		}
@@ -284,21 +324,11 @@ Atomic.events = {
 		}
 	},
 	
-	move : function(dx, dy, x, y, ev) {
-		// if it's a text item, fire on the "parent" instead
-		var idParts = this.id.split('_');
-		if(idParts.length==2 && idParts[1]=='text'){
-			console.log('**** REDIRECT TO ' + idParts[0]);
-			console.log(ev);
-			var par = Atomic.get(idParts[0]);			
-			par.move(dx, dy, x, y, ev);
-		}
-		
+	move : function(dx, dy, x, y, ev) {		
 		this.setX(this.ox + dx);
 		this.setY(this.oy + dy);
 		Atomic.updateConnectors(this);
 
-		console.log('after move: ' + this.id + ' ' + this.getX() + ',' + this.getY());		
 		if(this.text){
 			this.text.setX(this.getX());
 			this.text.setY(this.getY());
@@ -326,7 +356,7 @@ Atomic.events = {
 Atomic.factories = {
 
 	/**
-	 * Draws a cricle.
+	 * Draws a circle.
 	 * @info an object that must contain id, type, x, y, radius properties.
 	 * If a text property is present, the text is rendered at the center
 	 * of the circle and the text object will be returned as a property
@@ -366,6 +396,7 @@ Atomic.factories = {
 		connector.object1 = info.object1;
 		connector.object2 = info.object2;
 		connector.connectorType = info.connectorType;
+		connector.attributes = info.attributes;
 		return connector;
 	},
 
@@ -412,7 +443,7 @@ Atomic.factories = {
 				console.error('Failed to create path for connector. Invalid connectorType: "' + info.connectorType + '"');
 				break;
 		}
-		path.attr(info);
+		path.attr(info.attributes);
 		return path;
 	},
 
@@ -438,7 +469,7 @@ Atomic.factories = {
 		t.id = textId;
 		return t;
 	}
-}
+};
 
 
 // ---------------------------------------------------------------------------------
@@ -478,3 +509,26 @@ Raphael.fn.addMarker = function(markerInfo){
 	}
 	this.defs.appendChild(marker);
 };
+
+//---------------------------------------------------------------------------------
+Raphael.fn.addFilter = function(filterInfo, parentEl){
+	var NS_SVG = 'http://www.w3.org/2000/svg';
+	var newEl, ndx, value;
+	
+	if(parentEl == null){
+		parentEl = this.defs.appendChild(document.createElementNS(NS_SVG, 'filter'));		
+	}
+	
+	for(ndx in filterInfo){
+		value = filterInfo[ndx];
+		if(typeof(value) == 'object'){			
+			newEl = document.createElementNS(NS_SVG, ndx);
+			parentEl.appendChild(newEl);			
+			Raphael.fn.addFilter(value, newEl);			
+		}
+		else {
+			parentEl.setAttribute(ndx, value);
+		}
+	}	
+};
+
