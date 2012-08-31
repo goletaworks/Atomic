@@ -233,6 +233,11 @@ var Atomic = {
 
 		var pathPoints = [];
 		var objects = [object1, object2];
+		
+		if(info == null){
+			info = {};
+		}
+		
 		var connectorType = info.connectorType;
 
 		if(connectorType == null){

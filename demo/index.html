@@ -10,9 +10,9 @@
 		<meta name="viewport" content="width=device-width; initial-scale=1.0" />
 		<link rel="shortcut icon" href="/favicon.ico" />
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-		<script src="jquery-1.6.2.min.js"></script>
-		<script src="raphael-1.5.2.js"></script>
-		<script src="../src/Atomic.js"></script>
+		<script src="jquery-1.7.1.min.js"></script>
+		<script src="raphael-min-2.1.0.js"></script>
+		<script src="../src/atomic.js"></script>
 		<script>
 		jQuery(document).ready(function(){
 			Atomic.initialize(10, 10, 1024, 768);
@@ -72,7 +72,9 @@
 				
 				if(i > 0){
 					var lastCircle = Atomic.get('circle' + (i - 1));
-					lastCircle.connectTo(circle);
+					lastCircle.connectTo(circle, {
+						connectorType : Atomic.connectorTypes.ARC 
+					});
 
 					var lastImg = Atomic.get('image' + (i - 1));
 					lastImg.connectTo(img);
