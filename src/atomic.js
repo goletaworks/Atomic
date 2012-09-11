@@ -1,5 +1,5 @@
 var Atomic = {
-	CONNECTOR_NODE_SEPARATOR : '-',	
+	CONNECTOR_NODE_SEPARATOR : '-L-R-',	
 	FONT_SIZE : 12,
 	width : 0,
 	height : 0,
@@ -39,8 +39,16 @@ var Atomic = {
 	// --------------------------------------------------------------
 	initialize : function(x, y, w, h, container) {
 		this.width = w;
-		this.height = h;
-		
+		this.height = h;		
+		this.objects = {
+			circle : [],
+			connector : [],
+			ellipse : [],
+			image : [],
+			path : [],
+			rect : [],
+			text : []
+		};		
 		
 		if(container != null){
 			this.canvas = Raphael(container, w, h);
@@ -55,7 +63,6 @@ var Atomic = {
 		this.defineMarkers();
 		this.defineFilters();
 	},
-
 
 	// --------------------------------------------------------
 	// define the arrowheads
@@ -93,10 +100,10 @@ var Atomic = {
 			x : 0,
 			y : 0,
 			width : '200%',
-			height : '200%',
+			height : '220%',
 			feOffset : {
 				result : 'offOut',
-				'in' : 'SourceGraphic',
+				'in' : 'SourceAlpha',
 				dx : 20,
 				dy : 20,
 			},
@@ -134,15 +141,8 @@ var Atomic = {
 		var type = info.type;
 
 		// delegate object creation
-		var newObject = Atomic.factories[type](info);
-		newObject.type = type;
-		newObject.id = id;
-		newObject.node.id = id;
-
-		// add to the appropriate collection and register the id/type mapping
-		Atomic.objects[type][id] = newObject;
-		Atomic.idTypeMap[id] = type;
-
+		var newObject = Atomic.factories[type](info);		
+		
 		if(type != Atomic.types.CONNECTOR){
 			// add the convenience methods
 			newObject.connectTo = function(targetObject, info) { return Atomic.connect(newObject, targetObject, info); };
@@ -164,32 +164,34 @@ var Atomic = {
 			newObject.getW = function() { return this.attr('r') * 2; };
 			newObject.getH = function() { return this.attr('r') * 2; };
 		}
-		else if(type == Atomic.types.RECT) {
-			newObject.getX = function() { return this.attr('x'); };
-			newObject.getY = function() { return this.attr('y'); };
-			newObject.setX = function(x) { this.attr('x', x); };
-			newObject.setY = function(y) { this.attr('y', y); };
-			newObject.getW = function(x) { return this.attr('width'); };
-			newObject.getH = function(y) { return this.attr('height'); };
-		}
 		else {
 			newObject.getX = function() { return this.attr('x'); };
 			newObject.getY = function() { return this.attr('y'); };
 			newObject.setX = function(x) { this.attr('x', x); };
 			newObject.setY = function(y) { this.attr('y', y); };
-			newObject.getW = function(x) { return this.attr('width'); };
-			newObject.getH = function(y) { return this.attr('height'); };
+			newObject.getW = function() { return this.attr('width'); };
+			newObject.getH = function() { return this.attr('height'); };
 		}
 
 		if(type != Atomic.types.TEXT && info.text != null){
-			var x = type == Atomic.types.CIRCLE || type == Atomic.types.ELLIPSE ? info.x : info.x + newObject.getW();
-			var y = type == Atomic.types.CIRCLE || type == Atomic.types.ELLIPSE ? info.y : info.y + newObject.getH();
+			var x, y, textAnchor;
+			if(type == Atomic.types.CIRCLE || type == Atomic.types.ELLIPSE){
+				x = newObject.getX();
+				y = newObject.getY();
+				textAnchor = 'middle';
+			}
+			else {
+				x = newObject.getX() + newObject.getW() / 2;
+				y = newObject.getY() + newObject.getH() / 2;
+				textAnchor = 'left';
+			}
 
 			var t = Atomic.draw({
 				type : 'text',
-				id : info.id + '_text',
+				id : id + '_text',
 				x : x,
 				y : y,
+				'text-anchor' : textAnchor,
 				text : info.text
 			});
 			
@@ -230,20 +232,14 @@ var Atomic = {
 
 	// --------------------------------------------------------------
 	connect : function(object1, object2, info) {
-
+		var connectorType = info && info.connectorType || Atomic.connectorTypes.LINE;
 		var pathPoints = [];
 		var objects = [object1, object2];
 		
 		if(info == null){
 			info = {};
 		}
-		
-		var connectorType = info.connectorType;
-
-		if(connectorType == null){
-			connectorType == Atomic.connectorTypes.LINE;
-		}
-
+				
 		for(ndx in objects){
 			var obj = objects[ndx];
 			var x, y;
@@ -272,7 +268,7 @@ var Atomic = {
 			points : pathPoints,
 			object1 : object1,
 			object2 : object2,
-			connectorType : info.connectorType,
+			connectorType : connectorType,
 			attributes : info.attributes
 		});
 
@@ -329,19 +325,32 @@ Atomic.events = {
 		}
 	},
 	
-	move : function(dx, dy, x, y, ev) {		
+	move : function(dx, dy, x, y, ev) {
 		this.setX(this.ox + dx);
 		this.setY(this.oy + dy);
 		Atomic.updateConnectors(this);
-
+		
+		// TODO: clean this up
 		if(this.text){
-			this.text.setX(this.getX());
-			this.text.setY(this.getY());
+			if(this.type == Atomic.types.CIRCLE || this.type == Atomic.types.ELLIPSE){
+				this.text.setX(this.getX());
+				this.text.setY(this.getY());				
+			}
+			else{
+				this.text.setX(this.getX() + this.getW() / 2);
+				this.text.setY(this.getY() + this.getH() / 2);
+			}
 		}		
 		
-		if(this.parent){			
-			this.parent.setX(this.getX());
-			this.parent.setY(this.getY());
+		if(this.parent){
+			if(this.parent.type == Atomic.types.CIRCLE || this.parent.type == Atomic.types.ELLIPSE){
+				this.parent.setX(this.getX());
+				this.parent.setY(this.getY());				
+			}
+			else{
+				this.parent.setX(this.getX() - this.parent.getW() / 2);
+				this.parent.setY(this.getY() - this.parent.getH() / 2);
+			}
 			Atomic.updateConnectors(this.parent);
 		}		
 	},
@@ -368,27 +377,48 @@ Atomic.factories = {
 	 * of the circle.
 	 */
 	circle : function(info) {
-		var c = Atomic.canvas.circle(info.x, info.y, info.radius);
-		c.attr(info);
-		c.id = info.id;
-		Atomic.setObjectDragDropHandlers(c);
-		return c;
+		var obj = Atomic.canvas.circle(info.x, info.y, info.radius);
+		return Atomic.factories.generic(obj, info);
 	},
 
 	ellipse : function(info) {
-		var ell = Atomic.canvas.ellipse(info.x, info.y, info.width, info.height);
-		ell.attr(info);
-		ell.id = info.id;
-		Atomic.setObjectDragDropHandlers(ell);
-		return ell;
+		var obj = Atomic.canvas.ellipse(info.x, info.y, info.width, info.height);
+		return Atomic.factories.generic(obj, info);
 	},
 
 	image : function(info) {
-		var img = Atomic.canvas.image(info.src, info.x, info.y, info.width, info.height);
-		img.attr(info);
-		img.id = info.id;
-		Atomic.setObjectDragDropHandlers(img);
-		return img;
+		var obj = Atomic.canvas.image(info.src, info.x, info.y, info.width, info.height);
+		return Atomic.factories.generic(obj, info);
+	},
+
+	rect : function(info) {
+		var obj = Atomic.canvas.rect(info.x, info.y, info.width, info.height);
+		return Atomic.factories.generic(obj, info);		
+	},
+
+	/**
+	 * Draws text.
+	 * @info an object that must contain id, type, x, y, and text properties.
+	 */
+	text : function(info) {
+		var obj = Atomic.canvas.text(info.x, info.y, info.text);
+		info.id = info.text + '_' + info.x + '_' + info.y;
+		info['font-size'] = Atomic.FONT_SIZE;
+		return Atomic.factories.generic(obj, info);
+	},
+	
+	generic : function(obj, info) {
+		obj.attr(info);
+		obj.type = info.type;
+		obj.id = info.id;		
+		obj.node.id = info.id;
+		
+		// add to the appropriate collection and register the id/type mapping
+		Atomic.objects[info.type][info.id] = obj;
+		Atomic.idTypeMap[info.id] = info.type;		
+		
+		Atomic.setObjectDragDropHandlers(obj);
+		return obj;
 	},
 
 	/**
@@ -449,50 +479,36 @@ Atomic.factories = {
 				break;
 		}
 		path.attr(info.attributes);
+		path.type = info.type;
+		path.id = info.id;
+		path.node.id = info.id;
+
+		// add to the appropriate collection and register the id/type mapping
+		Atomic.objects[info.type][info.id] = path;
+		Atomic.idTypeMap[info.id] = info.type;		
+		
 		return path;
-	},
-
-
-	rect : function(info) {
-		var rect = Atomic.canvas.rect(info.x, info.y, info.width, info.height);
-		rect.attr(info);
-		Atomic.setObjectDragDropHandlers(rect);
-		return rect;
-	},
-
-
-
-	/**
-	 * Draws text.
-	 * @info an object that must contain id, type, x, y, and text properties.
-	 */
-	text : function(info) {
-		var t = Atomic.canvas.text(info.x, info.y, info.text);
-		t.attr({'font-size' : Atomic.FONT_SIZE});
-		t.attr(info);
-		var textId = info.text + '_' + info.x + '_' + info.y;
-		t.id = textId;
-		return t;
 	}
 };
 
 
 // ---------------------------------------------------------------------------------
-// Raphael extension to add markers
-/* E.g.:
-		id : 'Arrow',
-		viewBox : '0 0 10 10',
-		refX : -7,
-		refY : -7,
-		markerUnits : 'strokeWidth',
-		markerWidth : 10,
-		markerHeight : 10,
-		orient : 'auto',
-		polyline : {
-			points : '0,0 10,5 0,10 1,5',
-			fill : 'black'
-		}
-*/
+/** 
+ * Raphael extension to add markers
+ * E.g.:
+ *		id : 'Arrow',
+ *		viewBox : '0 0 10 10',
+ *		refX : -7,
+ *		efY : -7,
+ *		markerUnits : 'strokeWidth',
+ *		markerWidth : 10,
+ *		markerHeight : 10,
+ *		orient : 'auto',
+ *		polyline : {
+ *			points : '0,0 10,5 0,10 1,5',
+ *			fill : 'black'
+ *		}
+ */
 Raphael.fn.addMarker = function(markerInfo){
 	var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
 	var ndx, ndx2;
@@ -516,6 +532,9 @@ Raphael.fn.addMarker = function(markerInfo){
 };
 
 //---------------------------------------------------------------------------------
+/**
+ * Raphael extension to add filters
+ */
 Raphael.fn.addFilter = function(filterInfo, parentEl){
 	var NS_SVG = 'http://www.w3.org/2000/svg';
 	var newEl, ndx, value;
